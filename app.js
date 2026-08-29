@@ -1623,10 +1623,13 @@ async function backfillPaperMFE(){
 let paperTradeUpdateRunning=false;
 const PAPER_TRADE_CONCURRENCY=3;
 const paperMonitor={lastRun:null,lastDuration:0,checked:0,closed:0,errors:0,totalOpen:0,lastError:"",nextRun:null};
+function hasAnyBTradeNeedingMonitoring(){
+  return state.paperTrades.some(needsPaperMonitoring)||state.shadowTrades.some(needsPaperMonitoring);
+}
 
 function renderPaperMonitor(){
   const box=$("#paperMonitor"); if(!box) return;
-  const active=state.paperTrades.some(needsPaperMonitoring);
+  const active=hasAnyBTradeNeedingMonitoring();
   const now=Date.now();
   const next=paperMonitor.nextRun?Math.max(0,Math.ceil((paperMonitor.nextRun-now)/1000)):null;
   const stamp=paperMonitor.lastRun?new Date(paperMonitor.lastRun).toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit",second:"2-digit"}):"Aún no revisa";
@@ -1747,17 +1750,17 @@ setTimeout(maybeRunCloseSynchronizedScan,1500);
 setInterval(qra06ObserveNewTrades,10*1000);
 setTimeout(qra06ObserveNewTrades,2500);
 setInterval(()=>{
-  if(document.visibilityState==="visible" && state.paperTrades.some(needsPaperMonitoring)){
+  if(document.visibilityState==="visible" && hasAnyBTradeNeedingMonitoring()){
     updatePaperTrades();
   }
 },PAPER_TRADE_CHECK_MS);
 document.addEventListener("visibilitychange",()=>{
-  if(document.visibilityState==="visible" && state.paperTrades.some(needsPaperMonitoring)){
+  if(document.visibilityState==="visible" && hasAnyBTradeNeedingMonitoring()){
     updatePaperTrades();
   }
 });
 window.addEventListener("focus",()=>{
-  if(state.paperTrades.some(needsPaperMonitoring)) updatePaperTrades();
+  if(hasAnyBTradeNeedingMonitoring()) updatePaperTrades();
 });
 async function closePaperManual(id){
   const t=state.paperTrades.find(x=>x.id===id);if(!t)return;
