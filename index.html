@@ -17,14 +17,14 @@
   <header class="app-header">
     <div>
       <p class="eyebrow">Uso personal · Datos públicos</p>
-      <div class="brand-line"><h1>Centro Quant</h1><span class="version-badge">v6.11.7-B1.1</span></div>
+      <div class="brand-line"><h1>Centro Quant</h1><span class="version-badge">v6.11.7-B1.2-QRA09</span></div>
     </div>
     <button id="refreshAllBtn" class="icon-btn" aria-label="Actualizar">↻</button>
   </header>
 
   <main>
     <section id="homeView" class="view active home-v6">
-      <div class="v6-release-banner"><span class="release-dot"></span><div><strong>Centro Quant B v1 activo</strong><small>Backtest por Score · paper trading automático · R/B mínimo 1:3.</small></div></div>
+      <div class="v6-release-banner"><span class="release-dot"></span><div><strong>Centro Quant B v1 + QRA-09 activo</strong><small>B_MAIN intacto · QRA-09 prueba Escalera y Trailing con la misma entrada.</small></div></div>
 
       <article class="decision-hero">
         <div class="decision-topline">
@@ -366,6 +366,9 @@
       <div class="section-head mfe-head"><div><h3>🧪 Laboratorio QRA · fuera de muestra</h3><p>Control intacto vs Solo LONG, QRA-01 y sus dos salidas virtuales. QRA-03 sólo registra concentración por ahora.</p></div></div>
       <div id="qraLabStats" class="results-grid"></div>
       <details class="qra-trades-panel" open><summary><strong>Ver operaciones QRA</strong></summary><div id="qraLabTrades" class="results-grid"></div></details>
+      <div class="section-head mfe-head"><div><h3>🧪 QRA-09 · Gestión dinámica de salida</h3><p>Misma entrada de Quant B, tres gestores virtuales causales. B_MAIN no se modifica ni se cierra por estas ramas.</p></div></div>
+      <div id="qra09Stats" class="results-grid"></div>
+      <details class="qra-trades-panel" open><summary><strong>Ver posiciones QRA-09</strong></summary><div id="qra09Trades" class="results-grid"></div></details>
       <div class="section-head mfe-head"><div><h3>🎯 ¿Hasta dónde llegaron realmente?</h3><p>Máximo avance favorable antes del cierre, medido en R.</p></div></div>
       <div id="paperMfeStats" class="results-grid mfe-grid"></div>
       <div id="paperInsights" class="insights-card"></div>
@@ -469,6 +472,6 @@
 
   <script src="./app.js?v=6.10.5"></script>
 
-<div id="appVersionBadge" style="position:fixed;right:8px;bottom:8px;z-index:9999;font-size:10px;opacity:.45;pointer-events:none">v6.11.7-B1.1</div>
+<div id="appVersionBadge" style="position:fixed;right:8px;bottom:8px;z-index:9999;font-size:10px;opacity:.45;pointer-events:none">v6.11.7-B1.2-QRA09</div>
 </body>
 </html>

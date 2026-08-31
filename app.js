@@ -1,5 +1,5 @@
 
-// Centro Quant B v1 · challenger prospectivo congelado sobre v6.11.7.
+// Centro Quant B v1 · challenger prospectivo congelado sobre v6.11.7 · QRA-09 laboratorio de salidas.
 // IMPORTANTE: usa namespace localStorage quantb_ y NO comparte ledger/configuración con Quant A.
 (function(){
   if(!("serviceWorker" in navigator)) return;
@@ -26,7 +26,12 @@ const STABLE_ASSETS = new Set(["USDT","USDC","FDUSD","TUSD","DAI","USDE","USDS",
 const DEFAULT_ASSETS = ["BTC","ETH","SOL","LINK","AVAX"];
 const DEFAULT_WEIGHTS = {trend:30,momentum:20,strength:15,volume:15,volatility:10,structure:10};
 const QRA_LAB_VERSION = "QRA-OOS-1";
-const APP_VERSION = "6.11.7-B1";
+const APP_VERSION = "6.11.7-B1.2-QRA09";
+// QRA-09 · gestión dinámica de salida, sólo laboratorio.
+// Frontera fija: NO convierte operaciones previas en evidencia prospectiva.
+const QRA09_VERSION = "QRA-09-V1-2026-08-30";
+const QRA09_STARTED_AT = Date.parse("2026-08-31T02:12:00Z");
+
 const ENTRY_SYNC_VERSION = "CLOSE_SYNC_CAUSAL_V1";
 const ENTRY_SYNC_STARTED_AT = Number(localStorage.getItem("quantb_entry_sync_started_at")||0) || Date.now();
 localStorage.setItem("quantb_entry_sync_started_at",String(ENTRY_SYNC_STARTED_AT));
@@ -539,7 +544,7 @@ function buildResearchSnapshot(a,side){
   };
 }
 function buildResearchMeta(){
-  return {strategyVersion:APP_VERSION,researchGeneration:RESEARCH_GENERATION,prospectiveStartedAt:PROSPECTIVE_STARTED_AT,openedAfterHypothesisFreeze:true,hypothesisFreezeVersion:HYPOTHESIS_FREEZE_VERSION,hypotheses:Object.keys(HYPOTHESIS_REGISTRY),trailingABStartedAt:TRAILING_AB_STARTED_AT};
+  return {strategyVersion:APP_VERSION,researchGeneration:RESEARCH_GENERATION,prospectiveStartedAt:PROSPECTIVE_STARTED_AT,openedAfterHypothesisFreeze:true,hypothesisFreezeVersion:HYPOTHESIS_FREEZE_VERSION,hypotheses:Object.keys(HYPOTHESIS_REGISTRY),trailingABStartedAt:TRAILING_AB_STARTED_AT,qra09Version:QRA09_VERSION,qra09StartedAt:QRA09_STARTED_AT};
 }
 
 async function refreshHomeTimeframe(interval){
@@ -866,7 +871,7 @@ async function scanAutoPaper(manual=false){
     const qra04Snapshot=saveQra04BreadthSnapshot(state.scannerResults,a.interval,universe.length);
     renderScannerResults();
     saveAutoPaper();savePaperState();saveShadowState();renderPaperTrades();
-    finalStatus=`${a.enabled?"Activo":"Barrido manual"} · ${completed}/${universe.length} revisadas${failed?` · ${failed} sin respuesta`:""} · ${a.interval} · score ≥ ${a.threshold}${opened?` · ${opened} nueva${opened===1?"":"s"}`:" · sin señales nuevas"}${qra04Snapshot?" · QRA-04 ✓":""} · QRA-05 fase ✓ · QUANT B v1 ✓`;
+    finalStatus=`${a.enabled?"Activo":"Barrido manual"} · ${completed}/${universe.length} revisadas${failed?` · ${failed} sin respuesta`:""} · ${a.interval} · score ≥ ${a.threshold}${opened?` · ${opened} nueva${opened===1?"":"s"}`:" · sin señales nuevas"}${qra04Snapshot?" · QRA-04 ✓":""} · QRA-05 fase ✓ · QRA-09 salidas ✓ · QUANT B v1 ✓`;
   }catch(e){
     console.warn("scanAutoPaper",e);
     finalStatus="Barrido terminado con error · se reintentará en el siguiente ciclo";
@@ -1597,6 +1602,60 @@ function processExitComparison(t,c){
   if(Number(t.openedAt||0)>=TRAILING_AB_STARTED_AT) processVirtualExitBranch(x.trailing020,c,bestR,worstR,"trailing",0.20);
   processVirtualExitBranch(x.trailing025,c,bestR,worstR,"trailing",0.25);
 }
+
+// QRA-09 no toca B_MAIN: toma la misma entrada y copia causalmente el estado
+// de tres gestores virtuales independientes. Sólo operaciones nacidas después
+// de QRA09_STARTED_AT forman la cohorte prospectiva QRA-09.
+function isQra09Eligible(t){
+  return !!(t && t.bOperational===true && !t.bShadow && Number(t.openedAt||t.activationAt||t.createdAt||0)>=QRA09_STARTED_AT);
+}
+function cloneQra09Branch(b){
+  if(!b) return null;
+  return {status:b.status||"open",stopR:Number(b.stopR??-1),maxR:Number(b.maxR||0),resultR:b.resultR==null?null:Number(b.resultR),closedAt:b.closedAt==null?null:Number(b.closedAt)};
+}
+function syncQra09(t,c){
+  if(!isQra09Eligible(t)) return;
+  const x=ensureExitComparison(t);
+  if(!t.qra09){
+    t.qra09={version:QRA09_VERSION,mode:"research-only",controlUntouched:true,bMainUntouched:true,operational:false,prospective:true,startedAt:QRA09_STARTED_AT,sharedEntry:true,entry:t.entry,side:t.side,interval:t.interval,sourceTradeId:t.id,strategies:{ladder:"ESCALERA_1R",trailing020:"TRAILING_STEP_0.20R",trailing025:"TRAILING_STEP_0.25R"},lastProcessedAt:null,branches:{}};
+  }
+  t.qra09.entry=t.entry;
+  t.qra09.lastProcessedAt=Number(c?.t||Date.now());
+  t.qra09.branches={ladder:cloneQra09Branch(x.ladder),trailing020:cloneQra09Branch(x.trailing020),trailing025:cloneQra09Branch(x.trailing025)};
+}
+function qra09BranchR(t,key){
+  const b=t?.qra09?.branches?.[key];
+  return b?.status==="closed"?Number(b.resultR||0):null;
+}
+function qra09BranchLabel(t,key){
+  const b=t?.qra09?.branches?.[key];
+  if(!b) return "En seguimiento";
+  return b.status==="open"?`ABIERTA · stop ${b.stopR>=0?"+":""}${fmt(b.stopR,2)}R · máx. +${fmt(b.maxR||0,2)}R`:`CERRADA · ${b.resultR>=0?"+":""}${fmt(b.resultR,2)}R`;
+}
+function renderQra09Lab(){
+  const stats=$("#qra09Stats"), trades=$("#qra09Trades");
+  if(!stats&&!trades) return;
+  const pool=state.paperTrades.filter(isQra09Eligible).sort((a,b)=>Number(b.openedAt||0)-Number(a.openedAt||0));
+  if(!pool.length){
+    if(stats) stats.innerHTML='<div class="notice">QRA-09 listo. Sólo contará las nuevas entradas de Quant B creadas después de activar esta versión.</div>';
+    if(trades) trades.innerHTML='<div class="notice">Aún no hay posiciones prospectivas QRA-09.</div>';
+    return;
+  }
+  const keys=[["ladder","Escalera"],["trailing020","Trailing 0.20R"],["trailing025","Trailing 0.25R"]];
+  const cards=[["Cohorte QRA-09",`${pool.length} entradas compartidas · B_MAIN intacto`]];
+  for(const [key,label] of keys){
+    const vals=pool.map(t=>qra09BranchR(t,key)).filter(v=>v!==null);
+    const total=vals.reduce((a,b)=>a+Number(b||0),0);
+    const openN=pool.filter(t=>t?.qra09?.branches?.[key]?.status!=="closed").length;
+    cards.push([label,vals.length?`${total>=0?"+":""}${fmt(total,2)}R · ${vals.length} cerradas · ${openN} abiertas`:`0 cerradas · ${openN} abiertas`]);
+  }
+  cards.push(["Inicio prospectivo",new Date(QRA09_STARTED_AT).toLocaleString("es-MX")]);
+  if(stats) stats.innerHTML=cards.map(([k,v])=>`<div class="result-card"><span>${k}</span><strong>${v}</strong></div>`).join("");
+  if(trades) trades.innerHTML=pool.map(t=>{
+    const base=t.status==="open"?"ABIERTA":`${qraActualR(t)>=0?"+":""}${fmt(qraActualR(t)||0,2)}R`;
+    return `<div class="result-card qra-trade-card"><span>${new Date(t.openedAt).toLocaleString("es-MX")} · ${t.interval||""}</span><strong>${t.symbol} · ${(t.side||"").toUpperCase()}</strong><div class="qra-trade-lines"><div>B_MAIN: <b>${base}</b></div><div>QRA-09 Escalera: <b>${qra09BranchLabel(t,"ladder")}</b></div><div>QRA-09 Trailing 0.20R: <b>${qra09BranchLabel(t,"trailing020")}</b></div><div>QRA-09 Trailing 0.25R: <b>${qra09BranchLabel(t,"trailing025")}</b></div></div></div>`;
+  }).join("");
+}
 function comparisonLabel(branch){
   if(!branch) return "—";
   return branch.status==="open"?`Abierta · stop ${branch.stopR>=0?"+":""}${fmt(branch.stopR,2)}R · máx. +${fmt(branch.maxR||0,2)}R`:`${branch.resultR>=0?"+":""}${fmt(branch.resultR,2)}R`;
@@ -1676,6 +1735,7 @@ async function checkOnePaperTrade(t){
       const terminal=stopHit&&targetHit?"both":stopHit?"stop":targetHit?"target":"";
       appendTradeRPath(t,c,terminal);
       processExitComparison(t,c);
+      syncQra09(t,c);
       if(t.status==="open"){
         if(!stopHit) updateTradeMFE(t,c);
         // Si ambos niveles aparecen en una misma vela, sin datos intravela no conocemos
@@ -1685,6 +1745,7 @@ async function checkOnePaperTrade(t){
         else if(targetHit){updateTradeMFE(t,c);t.status="win";t.exit=t.target;t.closedAt=c.t}
         if(t.status!=="open"){t.resultPct=tradeResultPct(t,t.exit);if(!t.bShadow)await finalizeMarketBenchmark(t);}
       }
+      syncQra09(t,c);
       if(!needsPaperMonitoring(t)) break;
     }
     if(!needsPaperMonitoring(t)){
@@ -1903,6 +1964,7 @@ function renderPaperTrades(){
     $("#paperStats").insertAdjacentHTML("afterbegin",`<div class="result-card risk-alert-card"><span>ALERTA DE EXPOSICIÓN</span><strong>${fmt(openRiskPct,1)}% del capital está en riesgo simultáneo</strong></div>`);
   }
   renderQraLabStats();
+  renderQra09Lab();
 
   const mfeKnown=closed.filter(t=>t.mfeR>=0);
   const rLevels=[1,1.5,2,2.5,3];

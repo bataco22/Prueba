@@ -1,3 +1,18 @@
+# Centro Quant B v1.2 · QRA-09 — 2026-08-30
+
+Esta versión parte del ZIP `Centro_Quant_B_v1_1_Hotfix_Monitor_Shadow_2026-08-29` y conserva intactas las reglas operativas de Quant B.
+
+## QRA-09 · Gestión dinámica de salida
+- `B_MAIN` sigue siendo la referencia operativa y NO es modificado por QRA-09.
+- QRA-09 sólo admite operaciones nuevas nacidas después de su frontera prospectiva fija (2026-08-31 02:12 UTC).
+- Cada entrada elegible comparte exactamente entrada, dirección y velas con B_MAIN.
+- Mantiene tres posiciones virtuales independientes: Escalera, Trailing 0.20R y Trailing 0.25R.
+- Cada rama se cierra causalmente conforme llegan velas de 1 minuto y guarda `status`, `stopR`, `maxR`, `resultR` y `closedAt` dentro de `qra09` en el JSON.
+- Escalera: antes de +1R conserva stop -1R; +1R→BE; +1.25R→protege +1R; +2R→+1.25R; +2.5R→+2R; después continúa por escalones.
+- Trailing: antes de +1R conserva stop -1R; al alcanzar +1R pasa a BE y después sigue el máximo en pasos de 0.20R o 0.25R según la rama.
+- Las ramas QRA-09 pueden cerrar aunque B_MAIN siga abierta, y el monitor continúa siguiendo la comparación sin contaminar el ledger operativo.
+- Las operaciones anteriores al corte permanecen fuera de la cohorte QRA-09 aunque ya tengan datos históricos de `exitComparison`.
+
 # Centro Quant B v1 — Challenger prospectivo congelado 2026-08-29
 
 Este ZIP es un CLON independiente de Centro Quant A v6.11.7. No sustituye ni modifica el control. Usa claves localStorage `quantb_` para evitar mezclar el ledger con A.
