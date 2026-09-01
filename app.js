@@ -26,7 +26,9 @@ const STABLE_ASSETS = new Set(["USDT","USDC","FDUSD","TUSD","DAI","USDE","USDS",
 const DEFAULT_ASSETS = ["BTC","ETH","SOL","LINK","AVAX"];
 const DEFAULT_WEIGHTS = {trend:30,momentum:20,strength:15,volume:15,volatility:10,structure:10};
 const QRA_LAB_VERSION = "QRA-OOS-1";
-const APP_VERSION = "6.11.7-B1.2-QRA09";
+const APP_VERSION = "6.11.7-B1.3-QRA09-TRAJECTORY";
+const TRAJECTORY_LAB_VERSION = "QRA-09-TRAJECTORY-SNAPSHOTS-V1-2026-09-01";
+const TRAJECTORY_LEVELS = Object.freeze([0.50,0.75,1.00,1.25,1.50,2.00]);
 // QRA-09 · gestión dinámica de salida, sólo laboratorio.
 // Frontera fija: NO convierte operaciones previas en evidencia prospectiva.
 const QRA09_VERSION = "QRA-09-V1-2026-08-30";
@@ -528,7 +530,7 @@ function saveShadowState(){
 function makeQuantBShadow({createdAt,openedAt,sym,pick,a,analysis,signalCandle,signalCloseAt,signalAgeMs,qra05Signal,qra06Context,decision,referenceEntry}){
   const stopPct=Number(a.stopPct||3),targetPct=stopPct*3;
   const lv=paperLevels(referenceEntry,pick.side,"percent",stopPct,"percent",targetPct),riskDist=Math.abs(referenceEntry-lv.stop),rewardDist=Math.abs(lv.target-referenceEntry);
-  return {id:`B-SHADOW-${createdAt}-${sym}-${pick.side}`,symbol:sym,side:pick.side,interval:a.interval,entry:referenceEntry,stop:lv.stop,target:lv.target,openedAt,status:"open",current:referenceEntry,score:pick.score,capital:a.capital,riskPct:0,riskCash:0,qty:0,potentialProfit:0,rr:3,scoreType:"auto-score-top100",snapshot:buildResearchSnapshot(analysis,pick.side),researchMeta:buildResearchMeta(),notes:"QUANT B SHADOW · señal rechazada/esperada · se sigue contra control 3R",auto:true,bShadow:true,bOperational:false,bDecision:decision,qra05Signal,qra06Context,entryTimingFixed:true,createdAt,signalCandleAt:+signalCandle.t,signalCandleCloseAt:signalCloseAt,signalAgeMs,entrySyncVersion:ENTRY_SYNC_VERSION,entrySyncStartedAt:ENTRY_SYNC_STARTED_AT,executionModel:"NEXT_1M_OPEN_CAUSAL_V1",monitorInterval:"1m",pendingActivation:true,activationAt:openedAt,plannedStopPct:stopPct,plannedTargetPct:targetPct,monitorFrom:openedAt,closedAt:null,exit:null,resultPct:null,mfeR:0,maeR:0,candleLog:[],candleFormat:"t,o,h,l,c,v,ct",rPath:[],rPathFormat:"t,oR,bestR,worstR,cR,newLevels,terminal",rLevelsHit:[],exitComparison:newExitComparison(),qraLab:null};
+  return {id:`B-SHADOW-${createdAt}-${sym}-${pick.side}`,symbol:sym,side:pick.side,interval:a.interval,entry:referenceEntry,stop:lv.stop,target:lv.target,openedAt,status:"open",current:referenceEntry,score:pick.score,capital:a.capital,riskPct:0,riskCash:0,qty:0,potentialProfit:0,rr:3,scoreType:"auto-score-top100",snapshot:buildResearchSnapshot(analysis,pick.side),researchMeta:buildResearchMeta(),notes:"QUANT B SHADOW · señal rechazada/esperada · se sigue contra control 3R",auto:true,bShadow:true,bOperational:false,bDecision:decision,qra05Signal,qra06Context,entryTimingFixed:true,createdAt,signalCandleAt:+signalCandle.t,signalCandleCloseAt:signalCloseAt,signalAgeMs,entrySyncVersion:ENTRY_SYNC_VERSION,entrySyncStartedAt:ENTRY_SYNC_STARTED_AT,executionModel:"NEXT_1M_OPEN_CAUSAL_V1",monitorInterval:"1m",pendingActivation:true,activationAt:openedAt,plannedStopPct:stopPct,plannedTargetPct:targetPct,monitorFrom:openedAt,closedAt:null,exit:null,resultPct:null,mfeR:0,maeR:0,candleLog:[],candleFormat:"t,o,h,l,c,v,ct",rPath:[],rPathFormat:"t,oR,bestR,worstR,cR,newLevels,terminal",rLevelsHit:[],trajectorySnapshots:[],trajectoryLab:{version:TRAJECTORY_LAB_VERSION,mode:"research-only",controlUntouched:true,bMainUntouched:true,operational:false,levels:[...TRAJECTORY_LEVELS],snapshotCount:0},exitComparison:newExitComparison(),qraLab:null};
 }
 
 function buildResearchSnapshot(a,side){
@@ -856,7 +858,7 @@ async function scanAutoPaper(manual=false){
         }
         const stopPct=Number(a.stopPct||3),targetPct=stopPct*Number(bDecision.targetR),refLv=paperLevels(referenceEntry,pick.side,"percent",stopPct,"percent",targetPct),refRiskDist=Math.abs(referenceEntry-refLv.stop),refRewardDist=Math.abs(refLv.target-referenceEntry),rr=refRiskDist?refRewardDist/refRiskDist:0;
         const riskCash=a.capital*a.riskPct/100,qty=refRiskDist?riskCash/refRiskDist:0;
-        state.paperTrades.unshift({id:createdAt+Math.floor(Math.random()*1000000),symbol:sym,side:pick.side,interval:a.interval,entry:referenceEntry,stop:refLv.stop,target:refLv.target,openedAt,status:"open",current:referenceEntry,score:pick.score,capital:a.capital,riskPct:a.riskPct,riskCash,qty,potentialProfit:qty*refRewardDist,rr,checklist:{trend:true,signal:true,risk:true,noImpulse:true},scoreType:"auto-score-top100",snapshot:buildResearchSnapshot(analysis,pick.side),researchMeta:buildResearchMeta(),notes:`QUANT B ${bDecision.branch} · ${bDecision.reason} · objetivo ${bDecision.targetR}R`,auto:true,bOperational:true,bDecision,qra06Context,entryTimingFixed:true,createdAt,signalCandleAt:+signalCandle.t,signalCandleCloseAt:signalCloseAt,signalAgeMs,entrySyncVersion:ENTRY_SYNC_VERSION,entrySyncStartedAt:ENTRY_SYNC_STARTED_AT,executionModel:"NEXT_1M_OPEN_CAUSAL_V1",monitorInterval:"1m",pendingActivation:true,activationAt:openedAt,plannedStopPct:stopPct,plannedTargetPct:targetPct,monitorFrom:openedAt,closedAt:null,exit:null,resultPct:null,mfeR:0,maeR:0,candleLog:[],candleFormat:"t,o,h,l,c,v,ct",rPath:[],rPathFormat:"t,oR,bestR,worstR,cR,newLevels,terminal",rLevelsHit:[],exitComparison:newExitComparison(),qra05Signal, qraLab:null});
+        state.paperTrades.unshift({id:createdAt+Math.floor(Math.random()*1000000),symbol:sym,side:pick.side,interval:a.interval,entry:referenceEntry,stop:refLv.stop,target:refLv.target,openedAt,status:"open",current:referenceEntry,score:pick.score,capital:a.capital,riskPct:a.riskPct,riskCash,qty,potentialProfit:qty*refRewardDist,rr,checklist:{trend:true,signal:true,risk:true,noImpulse:true},scoreType:"auto-score-top100",snapshot:buildResearchSnapshot(analysis,pick.side),researchMeta:buildResearchMeta(),notes:`QUANT B ${bDecision.branch} · ${bDecision.reason} · objetivo ${bDecision.targetR}R`,auto:true,bOperational:true,bDecision,qra06Context,entryTimingFixed:true,createdAt,signalCandleAt:+signalCandle.t,signalCandleCloseAt:signalCloseAt,signalAgeMs,entrySyncVersion:ENTRY_SYNC_VERSION,entrySyncStartedAt:ENTRY_SYNC_STARTED_AT,executionModel:"NEXT_1M_OPEN_CAUSAL_V1",monitorInterval:"1m",pendingActivation:true,activationAt:openedAt,plannedStopPct:stopPct,plannedTargetPct:targetPct,monitorFrom:openedAt,closedAt:null,exit:null,resultPct:null,mfeR:0,maeR:0,candleLog:[],candleFormat:"t,o,h,l,c,v,ct",rPath:[],rPathFormat:"t,oR,bestR,worstR,cR,newLevels,terminal",rLevelsHit:[],trajectorySnapshots:[],trajectoryLab:{version:TRAJECTORY_LAB_VERSION,mode:"research-only",controlUntouched:true,bMainUntouched:true,operational:false,levels:[...TRAJECTORY_LEVELS],snapshotCount:0},exitComparison:newExitComparison(),qra05Signal, qraLab:null});
         opened++; return row;
       }catch(e){
         failed++;
@@ -1399,7 +1401,7 @@ async function createPaperTrade(){
   state.paperTrades.unshift({id:now,symbol:sym,side,interval:int,entry,stop:lv.stop,target:lv.target,openedAt:now,status:"open",current:entry,score,capital,riskPct,riskCash,qty,potentialProfit,rr,checklist,
     scoreType:usePending&&pending.combo?"1D+4H":"timeframe",scoreDaily:usePending&&pending.combo?pending.combo.dailyScore:null,score4h:usePending&&pending.combo?pending.combo.entryScore:null,
     snapshot:usePending?pending.snapshot:buildResearchSnapshot(a,side),researchMeta:buildResearchMeta(),
-    notes:$("#paperNotes").value.trim(),closedAt:null,exit:null,resultPct:null,mfeR:0,maeR:0,candleLog:[],candleFormat:"t,o,h,l,c,v,ct",rPath:[],rPathFormat:"t,oR,bestR,worstR,cR,newLevels,terminal",rLevelsHit:[],exitComparison:newExitComparison(),qraLab});
+    notes:$("#paperNotes").value.trim(),closedAt:null,exit:null,resultPct:null,mfeR:0,maeR:0,candleLog:[],candleFormat:"t,o,h,l,c,v,ct",rPath:[],rPathFormat:"t,oR,bestR,worstR,cR,newLevels,terminal",rLevelsHit:[],trajectorySnapshots:[],trajectoryLab:{version:TRAJECTORY_LAB_VERSION,mode:"research-only",controlUntouched:true,bMainUntouched:true,operational:false,levels:[...TRAJECTORY_LEVELS],snapshotCount:0},exitComparison:newExitComparison(),qraLab});
   savePaperState();state.pendingPaperSignal=null;$("#paperNotes").value="";["checkTrend","checkSignal","checkRisk","checkNoImpulse"].forEach(id=>$("#"+id).checked=false);renderPaperTrades();alert("Prueba guardada. La app seguirá su resultado.");
 }
 function intervalMs(interval){
@@ -1526,7 +1528,7 @@ function appendTradeRPath(t,c,terminal=""){
   t.rLevelsHit=Array.from(hit).sort((a,b)=>a-b);
   const row=[+c.t,+oR.toFixed(6),+bestR.toFixed(6),+worstR.toFixed(6),+cR.toFixed(6),newLevels,terminal||""];
   const last=t.rPath.at(-1);
-  if(last && +last[0]===+c.t){ t.rPath[t.rPath.length-1]=row; return; }
+  if(last && +last[0]===+c.t){ t.rPath[t.rPath.length-1]=row; return newLevels; }
   t.rPathCount=Number(t.rPathCount||0)+1;
   t.rPath.push(row);
   if(t.rPath.length>PAPER_CANDLE_LOG_MAX){
@@ -1534,6 +1536,69 @@ function appendTradeRPath(t,c,terminal=""){
     mergeRPathSummaryRow(t,dropped);
     t.rPathDropped=Number(t.rPathDropped||0)+1;
     t.rPathWindowed=true;
+  }
+  return newLevels;
+}
+
+// Laboratorio prospectivo de trayectoria. Guarda snapshots permanentes justo cuando
+// la operación cruza niveles R predefinidos. NO modifica stop, target ni estado operativo.
+function trajectoryEntryContext(t){
+  const q=t?.qra06Context||{};
+  const frame=q?.frames?.[t.interval]||{};
+  const d=q?.diagnostics||{};
+  return {
+    phase:String(t?.bDecision?.phase||t?.qra05Signal?.phase||frame?.phase||""),
+    timing:String(t?.bDecision?.timing||q?.virtualDecision||""),
+    higherBias:String(d?.higherBias||""),
+    mature:Boolean(d?.mature),atExtreme:Boolean(d?.atExtreme),early:Boolean(d?.early),
+    rsi:Number.isFinite(Number(frame?.rsi))?Number(frame.rsi):null,
+    adx:Number.isFinite(Number(frame?.adx))?Number(frame.adx):null,
+    volumeRatio:Number.isFinite(Number(frame?.volumeRatio))?Number(frame.volumeRatio):null,
+    distEma20Atr:Number.isFinite(Number(frame?.distEma20Atr))?Number(frame.distEma20Atr):null,
+    rangePos20:Number.isFinite(Number(frame?.rangePos20))?Number(frame.rangePos20):null
+  };
+}
+function recentTrajectoryProgress(t,lookback=8){
+  const rows=Array.isArray(t?.rPath)?t.rPath.slice(-Math.max(2,lookback)):[];
+  if(!rows.length) return {rows:0,newHighCandles:0,lastCloseR:null,bestR:null};
+  let running=-Infinity,newHighCandles=0;
+  for(const r of rows){const b=Number(r?.[2]);if(Number.isFinite(b)&&b>running+1e-9){running=b;newHighCandles++}}
+  return {rows:rows.length,newHighCandles,lastCloseR:Number(rows.at(-1)?.[4]),bestR:Number.isFinite(running)?running:null};
+}
+function captureTrajectorySnapshots(t,c,newLevels){
+  if(!Array.isArray(newLevels)||!newLevels.length) return;
+  if(!Array.isArray(t.trajectorySnapshots)) t.trajectorySnapshots=[];
+  const existing=new Set(t.trajectorySnapshots.map(x=>Number(x?.levelR)));
+  const cR=signedRFromPrice(t,c.c),ageH=Math.max(0,(Number(c.t)-Number(t.openedAt||c.t))/3600000);
+  const mfe=Number(t.mfeR||0),mae=Number(t.maeR||0),mfeAt=Number(t.mfeAt||c.t);
+  const progress=recentTrajectoryProgress(t,8),ctx=trajectoryEntryContext(t);
+  for(const level of TRAJECTORY_LEVELS){
+    if(existing.has(level)||!newLevels.some(x=>Number(x)>=level-1e-9)) continue;
+    t.trajectorySnapshots.push({
+      version:TRAJECTORY_LAB_VERSION,levelR:level,crossedAt:Number(c.t),interval:t.interval,side:t.side,
+      currentCloseR:+cR.toFixed(6),mfeR:+mfe.toFixed(6),maeR:+mae.toFixed(6),
+      ageHours:+ageH.toFixed(4),timeSinceLastMfeHours:+Math.max(0,(Number(c.t)-mfeAt)/3600000).toFixed(4),
+      givebackFromMfeR:+Math.max(0,mfe-cR).toFixed(6),progressRateRPerHour:ageH>0?+(mfe/ageH).toFixed(6):null,
+      recentRows:progress.rows,recentNewHighCandles:progress.newHighCandles,recentBestR:progress.bestR,recentLastCloseR:progress.lastCloseR,
+      candleVolume:Number(c.v||0),entryContext:ctx,outcome:null
+    });
+    existing.add(level);
+  }
+  t.trajectoryLab={version:TRAJECTORY_LAB_VERSION,mode:"research-only",controlUntouched:true,bMainUntouched:true,operational:false,levels:[...TRAJECTORY_LEVELS],snapshotCount:t.trajectorySnapshots.length};
+}
+function finalizeTrajectoryOutcomes(t){
+  if(!Array.isArray(t?.trajectorySnapshots)||t.status==="open") return;
+  const finalR=signedRFromPrice(t,Number(t.exit||t.current||t.entry));
+  const maxR=Number(t.mfeR||0);
+  for(const s of t.trajectorySnapshots){
+    if(s.outcome) continue;
+    const level=Number(s.levelR||0);
+    s.outcome={
+      finalStatus:t.status,finalR:+finalR.toFixed(6),closedAt:Number(t.closedAt||0),maxMfeR:+maxR.toFixed(6),
+      additionalMfeR:+Math.max(0,maxR-level).toFixed(6),continuedPlus050:maxR>=level+0.50-1e-9,
+      continuedPlus100:maxR>=level+1.00-1e-9,reached2R:maxR>=2-1e-9,reached3R:maxR>=3-1e-9,
+      returnedToLoss:t.status==="loss"
+    };
   }
 }
 
@@ -1733,17 +1798,18 @@ async function checkOnePaperTrade(t){
       const stopHit=t.side==="long"?c.l<=t.stop:c.h>=t.stop;
       const targetHit=t.side==="long"?c.h>=t.target:c.l<=t.target;
       const terminal=stopHit&&targetHit?"both":stopHit?"stop":targetHit?"target":"";
-      appendTradeRPath(t,c,terminal);
+      const trajectoryNewLevels=appendTradeRPath(t,c,terminal);
       processExitComparison(t,c);
       syncQra09(t,c);
       if(t.status==="open"){
         if(!stopHit) updateTradeMFE(t,c);
+        captureTrajectorySnapshots(t,c,trajectoryNewLevels);
         // Si ambos niveles aparecen en una misma vela, sin datos intravela no conocemos
         // cuál ocurrió primero. Conservamos el criterio conservador: stop primero.
         if(stopHit&&targetHit){t.status="loss";t.exit=t.stop;t.closedAt=c.t}
         else if(stopHit){t.status="loss";t.exit=t.stop;t.closedAt=c.t}
         else if(targetHit){updateTradeMFE(t,c);t.status="win";t.exit=t.target;t.closedAt=c.t}
-        if(t.status!=="open"){t.resultPct=tradeResultPct(t,t.exit);if(!t.bShadow)await finalizeMarketBenchmark(t);}
+        if(t.status!=="open"){t.resultPct=tradeResultPct(t,t.exit);finalizeTrajectoryOutcomes(t);if(!t.bShadow)await finalizeMarketBenchmark(t);}
       }
       syncQra09(t,c);
       if(!needsPaperMonitoring(t)) break;

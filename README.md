@@ -52,3 +52,12 @@ Base operativa congelada: v6.11.6 Entrada Sincronizada.
 - Seguimiento, MFE/MAE, trailing/escalera o cierres.
 
 QRA-06 solo escribe metadatos observacionales en `qra06Context` dentro del JSON para comparar después con el resultado real.
+
+
+## B1.3 · QRA-09 Trajectory Snapshots (2026-09-01)
+- No cambia entradas, stops, objetivos ni decisiones B_MAIN/Shadow.
+- Guarda snapshots prospectivos permanentes al cruzar +0.50R, +0.75R, +1R, +1.25R, +1.5R y +2R.
+- Cada snapshot conserva edad, MFE/MAE, giveback, tiempo desde último MFE, ritmo de progreso, progreso reciente y contexto de entrada QRA-05/QRA-06.
+- Al cerrar la operación añade etiquetas de desenlace (continuó +0.5R/+1R, alcanzó 2R/3R o terminó en pérdida).
+- El contexto RSI/ADX/volumen/EMA guardado en el snapshot es explícitamente el de ENTRADA; no se presenta como indicador recalculado al cruce.
+- Investigación solamente: no modifica el ledger operativo ni QRA-09 existente.
