@@ -17,14 +17,14 @@
   <header class="app-header">
     <div>
       <p class="eyebrow">Uso personal · Datos públicos</p>
-      <div class="brand-line"><h1>Centro Quant</h1><span class="version-badge">v6.11.7-B1.3-QRA09-TRAJECTORY</span></div>
+      <div class="brand-line"><h1>Centro Quant</h1><span class="version-badge">v6.11.7-B1.4-QRA10-MTF-EXIT</span></div>
     </div>
     <button id="refreshAllBtn" class="icon-btn" aria-label="Actualizar">↻</button>
   </header>
 
   <main>
     <section id="homeView" class="view active home-v6">
-      <div class="v6-release-banner"><span class="release-dot"></span><div><strong>Centro Quant B v1 + QRA-09 activo</strong><small>B_MAIN intacto · QRA-09 prueba Escalera y Trailing con la misma entrada.</small></div></div>
+      <div class="v6-release-banner"><span class="release-dot"></span><div><strong>Centro Quant B v1 + QRA-09 + QRA-10 activos</strong><small>B_MAIN intacto · QRA-09 gestiona salidas virtuales y QRA-10 supervisa 15m con contexto 1h.</small></div></div>
 
       <article class="decision-hero">
         <div class="decision-topline">
@@ -369,6 +369,9 @@
       <div class="section-head mfe-head"><div><h3>🧪 QRA-09 · Gestión dinámica de salida</h3><p>Misma entrada de Quant B, tres gestores virtuales causales. B_MAIN no se modifica ni se cierra por estas ramas.</p></div></div>
       <div id="qra09Stats" class="results-grid"></div>
       <details class="qra-trades-panel" open><summary><strong>Ver posiciones QRA-09</strong></summary><div id="qra09Trades" class="results-grid"></div></details>
+      <div class="section-head mfe-head"><div><h3>🧭 QRA-10 · Supervisor multitemporal de salida</h3><p>Para entradas 15m: revisa 1h al superar 6 horas o +2R y decide virtualmente CONTINUAR, PROTEGER o CERRAR. B_MAIN permanece intacto.</p></div></div>
+      <div id="qra10Stats" class="results-grid"></div>
+      <details class="qra-trades-panel" open><summary><strong>Ver posiciones QRA-10</strong></summary><div id="qra10Trades" class="results-grid"></div></details>
       <div class="section-head mfe-head"><div><h3>🎯 ¿Hasta dónde llegaron realmente?</h3><p>Máximo avance favorable antes del cierre, medido en R.</p></div></div>
       <div id="paperMfeStats" class="results-grid mfe-grid"></div>
       <div id="paperInsights" class="insights-card"></div>
@@ -472,6 +475,6 @@
 
   <script src="./app.js?v=6.10.5"></script>
 
-<div id="appVersionBadge" style="position:fixed;right:8px;bottom:8px;z-index:9999;font-size:10px;opacity:.45;pointer-events:none">v6.11.7-B1.3-QRA09-TRAJECTORY</div>
+<div id="appVersionBadge" style="position:fixed;right:8px;bottom:8px;z-index:9999;font-size:10px;opacity:.45;pointer-events:none">v6.11.7-B1.4-QRA10-MTF-EXIT</div>
 </body>
 </html>

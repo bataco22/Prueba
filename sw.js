@@ -1,9 +1,9 @@
-const CACHE_NAME="centro-quant-v6-11-7-b1-3-qra09-trajectory";
+const CACHE_NAME="centro-quant-v6-11-7-b1-4-qra10-mtf-exit";
 const CORE=[
   "./",
   "./index.html",
-  "./styles.css?v=6.11.7-B1.3-QRA09-TRAJECTORY",
-  "./app.js?v=6.11.7-B1.3-QRA09-TRAJECTORY",
+  "./styles.css?v=6.11.7-B1.4-QRA10-MTF-EXIT",
+  "./app.js?v=6.11.7-B1.4-QRA10-MTF-EXIT",
   "./manifest.webmanifest"
 ];
 

@@ -26,13 +26,21 @@ const STABLE_ASSETS = new Set(["USDT","USDC","FDUSD","TUSD","DAI","USDE","USDS",
 const DEFAULT_ASSETS = ["BTC","ETH","SOL","LINK","AVAX"];
 const DEFAULT_WEIGHTS = {trend:30,momentum:20,strength:15,volume:15,volatility:10,structure:10};
 const QRA_LAB_VERSION = "QRA-OOS-1";
-const APP_VERSION = "6.11.7-B1.3-QRA09-TRAJECTORY";
+const APP_VERSION = "6.11.7-B1.4-QRA10-MTF-EXIT";
 const TRAJECTORY_LAB_VERSION = "QRA-09-TRAJECTORY-SNAPSHOTS-V1-2026-09-01";
 const TRAJECTORY_LEVELS = Object.freeze([0.50,0.75,1.00,1.25,1.50,2.00]);
 // QRA-09 · gestión dinámica de salida, sólo laboratorio.
 // Frontera fija: NO convierte operaciones previas en evidencia prospectiva.
 const QRA09_VERSION = "QRA-09-V1-2026-08-30";
 const QRA09_STARTED_AT = Date.parse("2026-08-31T02:12:00Z");
+
+// QRA-10 · supervisor multitemporal de salida, sólo laboratorio prospectivo.
+// 15m dispara revisión 1h por edad >= 6h o al alcanzar >= +2R.
+const QRA10_VERSION = "QRA-10-MTF-EXIT-V1-2026-09-01";
+const QRA10_STARTED_AT = Date.parse("2026-09-01T21:28:00Z");
+const QRA10_15M_MAX_AGE_HOURS = 6;
+const QRA10_PROFIT_TRIGGER_R = 2;
+const QRA10_PROTECT_GIVEBACK_R = 0.50;
 
 const ENTRY_SYNC_VERSION = "CLOSE_SYNC_CAUSAL_V1";
 const ENTRY_SYNC_STARTED_AT = Number(localStorage.getItem("quantb_entry_sync_started_at")||0) || Date.now();
@@ -1626,7 +1634,8 @@ function hasVirtualOpen(t){
   const x=t.exitComparison;
   return !!(x && (x.ladder?.status==="open" || x.trailing020?.status==="open" || x.trailing025?.status==="open"));
 }
-function needsPaperMonitoring(t){ return t.status==="open" || hasVirtualOpen(t); }
+function hasQra10Open(t){return t?.qra10?.branch?.status==="open";}
+function needsPaperMonitoring(t){ return t.status==="open" || hasVirtualOpen(t) || hasQra10Open(t); }
 function ladderStopForMaxR(maxR){
   if(maxR<1) return -1;
   if(maxR<1.25) return 0;
@@ -1697,6 +1706,91 @@ function qra09BranchLabel(t,key){
   if(!b) return "En seguimiento";
   return b.status==="open"?`ABIERTA · stop ${b.stopR>=0?"+":""}${fmt(b.stopR,2)}R · máx. +${fmt(b.maxR||0,2)}R`:`CERRADA · ${b.resultR>=0?"+":""}${fmt(b.resultR,2)}R`;
 }
+
+// QRA-10 · Supervisor Multitemporal de Salida.
+// Sólo crea una rama virtual; jamás modifica B_MAIN, QRA-09 ni el ledger operativo.
+function isQra10Eligible(t){
+  return !!(t && t.bOperational===true && !t.bShadow && t.interval==="15m" && Number(t.openedAt||t.activationAt||t.createdAt||0)>=QRA10_STARTED_AT);
+}
+function ensureQra10(t){
+  if(!isQra10Eligible(t)) return null;
+  if(!t.qra10){
+    t.qra10={version:QRA10_VERSION,mode:"research-only",prospective:true,startedAt:QRA10_STARTED_AT,controlUntouched:true,bMainUntouched:true,operational:false,
+      sourceTradeId:t.id,entry:t.entry,side:t.side,interval:t.interval,reviewFrame:"1h",rules:{maxAgeHours:QRA10_15M_MAX_AGE_HOURS,profitTriggerR:QRA10_PROFIT_TRIGGER_R,protectGivebackR:QRA10_PROTECT_GIVEBACK_R},
+      triggers:{age6h:false,profit2r:false},lastReviewedClosed1hAt:null,reviews:[],branch:{status:"open",stopR:-1,maxR:0,resultR:null,closedAt:null,exitReason:null}};
+  }
+  return t.qra10;
+}
+function qra10Decision(t,frame,currentR,maxR){
+  const own=Number(frame?.score),opp=Number(frame?.oppositeScore),edge=(Number.isFinite(own)&&Number.isFinite(opp))?own-opp:0;
+  const trend=String(frame?.trend||""),phase=String(frame?.phaseCode||"");
+  const favorableTrend=t.side==="long"?trend==="Alcista":trend==="Bajista";
+  const oppositeTrend=t.side==="long"?trend==="Bajista":trend==="Alcista";
+  const supportive=["EARLY_IMPULSE","RESUMPTION"].includes(phase);
+  const exhausted=["EXTENSION","MATURE_IMPULSE"].includes(phase);
+  const deteriorating=["PULLBACK","LATERAL","TRANSITION","COUNTERTREND_BOUNCE"].includes(phase);
+  const adx=Number(frame?.adx||0);
+  if(edge<=-10 || (oppositeTrend&&edge<0)) return {action:"CLOSE",reason:"1h favorece claramente el lado contrario o perdió la estructura direccional.",edge,favorableTrend,oppositeTrend,supportive,exhausted,deteriorating};
+  if(maxR>=QRA10_PROFIT_TRIGGER_R && (exhausted||deteriorating||edge<10)) return {action:"PROTECT",reason:"Hay ganancia alta, pero 1h ya no justifica devolver demasiado recorrido.",edge,favorableTrend,oppositeTrend,supportive,exhausted,deteriorating};
+  if(favorableTrend&&edge>=10&&adx>=18&&(supportive||!deteriorating)) return {action:"CONTINUE",reason:"1h mantiene estructura, ventaja de score y fuerza suficientes para dejar correr.",edge,favorableTrend,oppositeTrend,supportive,exhausted,deteriorating};
+  if(currentR>0) return {action:"PROTECT",reason:"1h es mixto; se conserva la operación pero con protección de beneficio/recorrido.",edge,favorableTrend,oppositeTrend,supportive,exhausted,deteriorating};
+  return {action:"CLOSE",reason:"Tras el disparador temporal, 1h no confirma continuidad suficiente para sostener riesgo abierto.",edge,favorableTrend,oppositeTrend,supportive,exhausted,deteriorating};
+}
+async function qra10ReviewFrame(t,atTime){
+  const candles=await qra06CandlesAt(t.symbol,"1h",atTime);
+  const frame=qra06FrameSnapshot(analyze(candles),candles,t.side);
+  const closed1h=candles.slice(0,-1).at(-1);
+  return {frame,closed1hAt:Number(closed1h?.t||0)};
+}
+function qra10CloseBranch(q,at,resultR,reason){
+  const b=q?.branch;if(!b||b.status!=="open")return;
+  b.status="closed";b.resultR=+Number(resultR||0).toFixed(6);b.closedAt=Number(at);b.exitReason=reason||"QRA10";
+}
+async function processQra10(t,c){
+  const q=ensureQra10(t); if(!q) return;
+  const b=q.branch;if(!b||b.status!=="open") return;
+  const hR=signedRFromPrice(t,c.h),lR=signedRFromPrice(t,c.l),bestR=Math.max(hR,lR),worstR=Math.min(hR,lR),closeR=signedRFromPrice(t,c.c);
+  const priorStop=Number(b.stopR??-1);
+  if(worstR<=priorStop+1e-9){qra10CloseBranch(q,c.t,priorStop,"PROTECTIVE_STOP");return;}
+  b.maxR=Math.max(Number(b.maxR||0),bestR);
+  const baseTargetR=Math.max(0,signedRFromPrice(t,t.target));
+  if(baseTargetR>0&&bestR>=baseTargetR-1e-9){qra10CloseBranch(q,c.t,baseTargetR,"BASE_TARGET");return;}
+  const ageH=Math.max(0,(Number(c.ct||c.t)-Number(t.openedAt||c.t))/3600000);
+  if(ageH>=QRA10_15M_MAX_AGE_HOURS) q.triggers.age6h=true;
+  if(b.maxR>=QRA10_PROFIT_TRIGGER_R) q.triggers.profit2r=true;
+  if(!q.triggers.age6h&&!q.triggers.profit2r) return;
+  let review;
+  try{review=await qra10ReviewFrame(t,Number(c.ct||c.t)+1);}catch(e){q.lastError=String(e?.message||e);return;}
+  if(!review.closed1hAt || review.closed1hAt===Number(q.lastReviewedClosed1hAt||0)) return;
+  q.lastReviewedClosed1hAt=review.closed1hAt;
+  const d=qra10Decision(t,review.frame,closeR,b.maxR);
+  q.reviews.push({at:Number(c.t),candleCloseAt:Number(c.ct||0),closed1hAt:review.closed1hAt,ageHours:+ageH.toFixed(4),currentR:+closeR.toFixed(6),maxR:+b.maxR.toFixed(6),triggerAge6h:q.triggers.age6h,triggerProfit2r:q.triggers.profit2r,action:d.action,reason:d.reason,frame:review.frame,diagnostics:d});
+  if(q.reviews.length>48) q.reviews=q.reviews.slice(-48);
+  if(d.action==="CLOSE"){qra10CloseBranch(q,c.t,closeR,"MTF_CLOSE");return;}
+  if(d.action==="PROTECT"){
+    let floor=Math.max(priorStop,0);
+    if(b.maxR>=QRA10_PROFIT_TRIGGER_R) floor=Math.max(floor,b.maxR-QRA10_PROTECT_GIVEBACK_R,1.25);
+    else if(closeR>=1) floor=Math.max(floor,0.5);
+    // El stop nuevo entra en vigor desde la siguiente vela de 1m; no usamos
+    // el mínimo/máximo anterior de esta misma vela para evitar sesgo intravela.
+    b.stopR=+floor.toFixed(6);
+  }
+}
+function qra10Label(t){
+  const q=t?.qra10,b=q?.branch;if(!q||!b)return "Esperando disparador";
+  if(b.status==="closed")return `CERRADA · ${b.resultR>=0?"+":""}${fmt(b.resultR,2)}R · ${b.exitReason||""}`;
+  const last=q.reviews?.at(-1),tr=[];if(q.triggers?.age6h)tr.push("≥6h");if(q.triggers?.profit2r)tr.push("≥2R");
+  return `${last?.action||"ESPERA"} · stop ${b.stopR>=0?"+":""}${fmt(b.stopR,2)}R · máx. +${fmt(b.maxR||0,2)}R${tr.length?` · ${tr.join("/")}`:""}`;
+}
+function renderQra10Lab(){
+  const stats=$("#qra10Stats"),trades=$("#qra10Trades");if(!stats&&!trades)return;
+  const pool=state.paperTrades.filter(isQra10Eligible).sort((a,b)=>Number(b.openedAt||0)-Number(a.openedAt||0));
+  if(!pool.length){if(stats)stats.innerHTML='<div class="notice">QRA-10 listo. Contará únicamente nuevas operaciones Quant B de 15m posteriores a esta versión.</div>';if(trades)trades.innerHTML='<div class="notice">Aún no hay posiciones prospectivas QRA-10.</div>';return;}
+  const closed=pool.filter(t=>t?.qra10?.branch?.status==="closed"),totalR=closed.reduce((s,t)=>s+Number(t.qra10.branch.resultR||0),0),reviews=pool.reduce((s,t)=>s+(t?.qra10?.reviews?.length||0),0);
+  if(stats)stats.innerHTML=[["Cohorte QRA-10",`${pool.length} operaciones 15m · B_MAIN intacto`],["Revisiones 1h",reviews],["Rama QRA-10 cerrada",`${closed.length} · ${totalR>=0?"+":""}${fmt(totalR,2)}R`],["Disparadores","≥6h abierta o ≥+2R"],["Inicio prospectivo",new Date(QRA10_STARTED_AT).toLocaleString("es-MX")]].map(([k,v])=>`<div class="result-card"><span>${k}</span><strong>${v}</strong></div>`).join("");
+  if(trades)trades.innerHTML=pool.map(t=>{const last=t?.qra10?.reviews?.at(-1);return `<div class="result-card qra-trade-card"><span>${new Date(t.openedAt).toLocaleString("es-MX")} · 15m → supervisor 1h</span><strong>${t.symbol} · ${(t.side||"").toUpperCase()}</strong><div class="qra-trade-lines"><div>QRA-10: <b>${qra10Label(t)}</b></div><div>Última lectura 1h: <b>${last?`${last.action} · score ${fmt(last.frame?.score||0,0)} vs ${fmt(last.frame?.oppositeScore||0,0)} · ${last.frame?.phase||"—"}`:"Sin disparador todavía"}</b></div></div></div>`;}).join("");
+}
+
 function renderQra09Lab(){
   const stats=$("#qra09Stats"), trades=$("#qra09Trades");
   if(!stats&&!trades) return;
@@ -1804,6 +1898,7 @@ async function checkOnePaperTrade(t){
       if(t.status==="open"){
         if(!stopHit) updateTradeMFE(t,c);
         captureTrajectorySnapshots(t,c,trajectoryNewLevels);
+        await processQra10(t,c);
         // Si ambos niveles aparecen en una misma vela, sin datos intravela no conocemos
         // cuál ocurrió primero. Conservamos el criterio conservador: stop primero.
         if(stopHit&&targetHit){t.status="loss";t.exit=t.stop;t.closedAt=c.t}
@@ -1812,6 +1907,7 @@ async function checkOnePaperTrade(t){
         if(t.status!=="open"){t.resultPct=tradeResultPct(t,t.exit);finalizeTrajectoryOutcomes(t);if(!t.bShadow)await finalizeMarketBenchmark(t);}
       }
       syncQra09(t,c);
+      if(t.status!=="open" && hasQra10Open(t)) await processQra10(t,c);
       if(!needsPaperMonitoring(t)) break;
     }
     if(!needsPaperMonitoring(t)){
@@ -2031,6 +2127,7 @@ function renderPaperTrades(){
   }
   renderQraLabStats();
   renderQra09Lab();
+  renderQra10Lab();
 
   const mfeKnown=closed.filter(t=>t.mfeR>=0);
   const rLevels=[1,1.5,2,2.5,3];

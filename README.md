@@ -1,3 +1,20 @@
+# Centro Quant B v1.4 · QRA-10 Supervisor Multitemporal — 2026-09-01
+
+Esta versión parte de `Centro_Quant_B_v1_3_QRA09_Trajectory_Lab_2026-09-01.zip`. Conserva B_MAIN y QRA-09 intactos y añade QRA-10 exclusivamente como rama prospectiva de laboratorio.
+
+## QRA-10 · Supervisor multitemporal de salida
+- Elegibilidad: sólo operaciones operativas Quant B nacidas en 15m después de 2026-09-01 21:28 UTC.
+- Disparador A: operación abierta durante 6 horas o más.
+- Disparador B: MFE de la rama QRA-10 alcanza +2R o más.
+- Al activarse, consulta contexto de 1h con velas ya cerradas (point-in-time).
+- Después del primer disparador puede volver a revisar únicamente cuando exista una nueva vela 1h cerrada; no consulta cada minuto.
+- Decisiones virtuales: CONTINUE, PROTECT o CLOSE.
+- PROTECT conserva al menos BE; si ya hubo +2R, protege como mínimo +1.25R y deja un giveback máximo inicial de 0.50R respecto al máximo de la rama.
+- CLOSE cierra la rama QRA-10 al cierre causal disponible de la vela de monitorización.
+- La rama también respeta el stop base -1R y el objetivo base +3R.
+- Guarda en JSON cada revisión: edad, R actual, MFE, disparador, snapshot 1h, score propio/opuesto, fase, decisión y motivo.
+- B_MAIN, QRA-09, entradas, stops y objetivos operativos NO se modifican.
+
 # Centro Quant B v1.2 · QRA-09 — 2026-08-30
 
 Esta versión parte del ZIP `Centro_Quant_B_v1_1_Hotfix_Monitor_Shadow_2026-08-29` y conserva intactas las reglas operativas de Quant B.
