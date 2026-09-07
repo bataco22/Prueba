@@ -26,7 +26,7 @@ const STABLE_ASSETS = new Set(["USDT","USDC","FDUSD","TUSD","DAI","USDE","USDS",
 const DEFAULT_ASSETS = ["BTC","ETH","SOL","LINK","AVAX"];
 const DEFAULT_WEIGHTS = {trend:30,momentum:20,strength:15,volume:15,volatility:10,structure:10};
 const QRA_LAB_VERSION = "QRA-OOS-1";
-const APP_VERSION = "6.11.7-B1.4-QRA10-MTF-EXIT";
+const APP_VERSION = "6.11.7-B1.4-QRA10-MTF-EXIT-HF2";
 const TRAJECTORY_LAB_VERSION = "QRA-09-TRAJECTORY-SNAPSHOTS-V1-2026-09-01";
 const TRAJECTORY_LEVELS = Object.freeze([0.50,0.75,1.00,1.25,1.50,2.00]);
 // QRA-09 · gestión dinámica de salida, sólo laboratorio.
@@ -196,9 +196,9 @@ async function apiMonitor(path, params={}){
   const url = new URL(API_BASE + path);
   Object.entries(params).forEach(([k,v])=>url.searchParams.set(k,v));
   let lastError=null;
-  for(let attempt=0;attempt<2;attempt++){
+  for(let attempt=0;attempt<1;attempt++){
     const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),8000);
+    const timeout=setTimeout(()=>controller.abort(),6000);
     try{
       const r=await fetch(url,{signal:controller.signal,cache:"no-store"});
       if(!r.ok){const err=new Error("API "+r.status);err.status=r.status;throw err;}
@@ -206,7 +206,7 @@ async function apiMonitor(path, params={}){
     }catch(e){
       lastError=e;
       const retryable=e?.name==="AbortError" || !e?.status || e.status===429 || e.status>=500;
-      if(!retryable || attempt===1) throw e;
+      if(!retryable || attempt===0) throw e;
       await new Promise(resolve=>setTimeout(resolve,350));
     }finally{clearTimeout(timeout);}
   }
@@ -1783,8 +1783,14 @@ async function processQra10(t,c){
   if(ageH>=QRA10_15M_MAX_AGE_HOURS) q.triggers.age6h=true;
   if(b.maxR>=QRA10_PROFIT_TRIGGER_R) q.triggers.profit2r=true;
   if(!q.triggers.age6h&&!q.triggers.profit2r) return;
+  // HF2: una misma vela 1h cerrada sólo se consulta una vez por operación.
+  // Antes, al reconstruir cientos/miles de velas de 1m, QRA-10 podía pedir
+  // repetidamente el mismo marco 1h y bloquear el monitor durante minutos.
+  const reviewAt=Number(c.ct||c.t)+1;
+  const expectedClosed1hAt=timeframeBoundaryAt("1h",reviewAt)-intervalMs("1h");
+  if(expectedClosed1hAt>0 && Number(q.lastReviewedClosed1hAt||0)>=expectedClosed1hAt) return;
   let review;
-  try{review=await qra10ReviewFrame(t,Number(c.ct||c.t)+1);}catch(e){q.lastError=String(e?.message||e);return;}
+  try{review=await qra10ReviewFrame(t,reviewAt);}catch(e){q.lastError=String(e?.message||e);return;}
   if(!review.closed1hAt || review.closed1hAt===Number(q.lastReviewedClosed1hAt||0)) return;
   q.lastReviewedClosed1hAt=review.closed1hAt;
   const d=qra10Decision(t,review.frame,closeR,b.maxR);
@@ -1863,7 +1869,7 @@ async function backfillPaperMFE(){
   if(missing.length) savePaperState();
 }
 let paperTradeUpdateRunning=false;
-const PAPER_TRADE_CONCURRENCY=3;
+const PAPER_TRADE_CONCURRENCY=5;
 const paperMonitor={lastRun:null,lastDuration:0,checked:0,closed:0,errors:0,totalOpen:0,lastError:"",nextRun:null};
 function hasAnyBTradeNeedingMonitoring(){
   return state.paperTrades.some(needsPaperMonitoring)||state.shadowTrades.some(needsPaperMonitoring);

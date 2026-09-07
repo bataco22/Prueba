@@ -84,3 +84,11 @@ QRA-06 solo escribe metadatos observacionales en `qra06Context` dentro del JSON 
 - Prioriza la revisión de posiciones abiertas al iniciar, antes del refresco pesado del mercado.
 - Las peticiones exclusivas del monitor usan 2 intentos de 8 s; si una falla, la posición queda abierta y se recupera en la siguiente ronda de 45 s.
 - Se conserva la reconstrucción causal por velas y `monitorFrom`; no se descartan datos de una operación por un fallo temporal de red.
+
+
+## HF2 Anti-Atasco · 2026-09-07
+- Corrección técnica: QRA-10 ya no vuelve a descargar el mismo marco 1h por cada vela de 1m reconstruida.
+- Monitor: timeout de consulta reducido a 6 s y sin reintento dentro de la misma ronda; la siguiente ronda recupera fallos transitorios.
+- Concurrencia de revisión ajustada a 5 posiciones.
+- Cache/versionado PWA renovado a HF2 para forzar que iOS cargue el código nuevo.
+- Sin cambios en señales, scores, entradas, stop, objetivos, B_MAIN, QRA-09 ni reglas QRA-10.
