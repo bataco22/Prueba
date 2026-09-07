@@ -189,6 +189,30 @@ async function api(path, params={}){
   throw lastError||new Error("API sin respuesta");
 }
 
+// Hotfix técnico HF1: las revisiones de posiciones usan un presupuesto de red
+// más corto que el resto de la app. Si Binance está lento, esa posición falla
+// en esta ronda y se recupera en la siguiente; nunca cambia señales ni precios.
+async function apiMonitor(path, params={}){
+  const url = new URL(API_BASE + path);
+  Object.entries(params).forEach(([k,v])=>url.searchParams.set(k,v));
+  let lastError=null;
+  for(let attempt=0;attempt<2;attempt++){
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),8000);
+    try{
+      const r=await fetch(url,{signal:controller.signal,cache:"no-store"});
+      if(!r.ok){const err=new Error("API "+r.status);err.status=r.status;throw err;}
+      return await r.json();
+    }catch(e){
+      lastError=e;
+      const retryable=e?.name==="AbortError" || !e?.status || e.status===429 || e.status>=500;
+      if(!retryable || attempt===1) throw e;
+      await new Promise(resolve=>setTimeout(resolve,350));
+    }finally{clearTimeout(timeout);}
+  }
+  throw lastError||new Error("API monitor sin respuesta");
+}
+
 function ema(values, period){
   const k=2/(period+1), out=[];
   let prev=values[0];
@@ -1870,7 +1894,7 @@ async function checkOnePaperTrade(t){
     // Pagina para poder recuperarse después de una desconexión larga sin quedar limitado
     // a las primeras 1000 velas de la operación.
     for(let page=0;page<20;page++){
-      const raw=await api("/klines",{symbol:t.symbol+"USDT",interval:monitorInt,startTime,limit:1000});
+      const raw=await apiMonitor("/klines",{symbol:t.symbol+"USDT",interval:monitorInt,startTime,limit:1000});
       if(!raw.length) break;
       const batch=raw.map(x=>({t:+x[0],o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[5],ct:+x[6]}));
       all.push(...batch);
@@ -2300,7 +2324,16 @@ $("#exportPaperBtn").onclick=exportPaperCSV;
 
 repairQraLabContinuity();
 runStorageMaintenance();
-renderWeights();fillAssetSelects();renderAssets();renderRanking();renderPaperTrades();renderPaperMonitor();renderScannerResults();syncAutoPaperControls();if($("#homeTimeframeSelect"))$("#homeTimeframeSelect").value=state.homeInterval;renderHome();refreshAll().then(async()=>{await refreshHomeTimeframe(state.homeInterval);await updatePaperTrades();await backfillPaperMFE();renderPaperTrades();await scanAutoPaper();});
+renderWeights();fillAssetSelects();renderAssets();renderRanking();renderPaperTrades();renderPaperMonitor();renderScannerResults();syncAutoPaperControls();if($("#homeTimeframeSelect"))$("#homeTimeframeSelect").value=state.homeInterval;renderHome();
+// HF1: prioriza el seguimiento de posiciones existentes antes del refresco pesado de mercado.
+(async()=>{
+  await updatePaperTrades();
+  await backfillPaperMFE();
+  renderPaperTrades();
+  await refreshAll();
+  await refreshHomeTimeframe(state.homeInterval);
+  await scanAutoPaper();
+})();
 if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(console.warn);
 
 

@@ -78,3 +78,9 @@ QRA-06 solo escribe metadatos observacionales en `qra06Context` dentro del JSON 
 - Al cerrar la operación añade etiquetas de desenlace (continuó +0.5R/+1R, alcanzó 2R/3R o terminó en pérdida).
 - El contexto RSI/ADX/volumen/EMA guardado en el snapshot es explícitamente el de ENTRADA; no se presenta como indicador recalculado al cruce.
 - Investigación solamente: no modifica el ledger operativo ni QRA-09 existente.
+
+## Hotfix técnico HF1 — monitor anti-atasco (2026-09-07)
+- No cambia estrategia, señales, scores, LONG/SHORT, stops, targets, QRA-09 ni QRA-10.
+- Prioriza la revisión de posiciones abiertas al iniciar, antes del refresco pesado del mercado.
+- Las peticiones exclusivas del monitor usan 2 intentos de 8 s; si una falla, la posición queda abierta y se recupera en la siguiente ronda de 45 s.
+- Se conserva la reconstrucción causal por velas y `monitorFrom`; no se descartan datos de una operación por un fallo temporal de red.
